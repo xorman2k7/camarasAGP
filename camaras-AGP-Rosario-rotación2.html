@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cámaras AGP Rosario</title>
+    <!-- Cargamos HLS.js desde CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #fff;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .video-container {
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 16 / 9;
+            margin: 20px auto;
+            background: black;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        #videoPlayer {
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+        }
+        .controls-panel {
+            background: #222;
+            padding: 15px;
+            border-radius: 8px;
+            display: inline-block;
+            margin-top: 15px;
+        }
+        .controls-panel label {
+            margin: 0 10px;
+            cursor: pointer;
+        }
+        #currentUrl {
+            color: #aaa;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Cámaras AGP Rosario</h2>
+    
+    <!-- Panel de Radiobuttons con las 4 opciones -->
+    <div class="controls-panel">
+        <strong>Modo de Reproducción:</strong><br><br>
+        <label><input type="radio" name="streamMode" value="rotate" checked> Rotar automático</label>
+        <label><input type="radio" name="streamMode" value="0"> Prefectura</label>
+        <label><input type="radio" name="streamMode" value="1"> La Fluvial</label>
+        <label><input type="radio" name="streamMode" value="2"> Puente Ros-Vic</label>
+    </div>
+
+    <div class="video-container">
+        <video id="videoPlayer" controls autoplay muted playsinline></video>
+    </div>
+    
+    <p id="currentUrl">Cargando...</p>
+
+    <script>
+        const streamUrls = [
+            "https://hidrografia2.agpse.gob.ar:8443/stream/afc2f6c2-06b3-4224-8cfe-c65972280382/channel/0/hlsll/live/index.m3u8",
+            "https://hidrografia2.agpse.gob.ar:8443/stream/ad9c5d3b-8009-48fd-ac47-a83ff9c741bb/channel/0/hlsll/live/index.m3u8",
+            "https://hidrografia2.agpse.gob.ar:8443/stream/9895ceb1-6a6c-48c5-869c-070c64398bc8/channel/0/hlsll/live/index.m3u8"
+        ];
+
+        let currentIndex = 0;
+        let hls = null;
+        let rotationTimer = null;
+        const intervaloSegundos = 15; // Tiempo para cambiar si está en modo rotación
+
+        const video = document.getElementById('videoPlayer');
+        const urlDisplay = document.getElementById('currentUrl');
+
+        function playStream(url) {
+            urlDisplay.innerText = "Reproduciendo actualmente: " + url;
+
+            if (hls) {
+                hls.destroy();
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    maxBufferLength: 30,     // Buffer optimizado
+                    minBufferLength: 5,
+                    maxMaxBufferLength: 60,
+                    liveSyncDurationCount: 10,
+                    lowLatencyMode: false
+                });
+
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.muted = true; // Asegurar silencio para cumplir con políticas de Firefox
+                    video.play().catch(e => console.log("Autoplay bloqueado:", e));
+                });
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = url;
+                video.addEventListener('loadedmetadata', function() {
+                    video.muted = true;
+                    video.play().catch(e => console.log("Autoplay bloqueado:", e));
+                });
+            }
+        }
+
+        // Función que gestiona la rotación automática
+        function iniciarRotacion() {
+            // Limpiamos cualquier temporizador previo para evitar duplicados
+            if (rotationTimer) clearInterval(rotationTimer);
+
+            rotationTimer = setInterval(() => {
+                // Avanzamos al siguiente índice (0 -> 1 -> 2 -> 0...)
+                currentIndex = (currentIndex + 1) % streamUrls.length;
+                playStream(streamUrls[currentIndex]);
+            }, intervaloSegundos * 1000);
+        }
+
+        // --- GESTIÓN DE LOS RADIOBUTTONS ---
+        const radioButtons = document.querySelectorAll('input[name="streamMode"]');
+
+        radioButtons.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const seleccion = e.target.value;
+
+                if (seleccion === 'rotate') {
+                    // Modo Rotación Activo
+                    iniciarRotacion();
+                } else {
+                    // Modo Fijo Activo (0, 1 o 2)
+                    if (rotationTimer) {
+                        clearInterval(rotationTimer); // Detenemos la rotación automática
+                    }
+                    
+                    const indiceFijo = parseInt(seleccion, 10);
+                    currentIndex = indiceFijo;
+                    playStream(streamUrls[currentIndex]); // Reproducimos inmediatamente el seleccionado
+                }
+            });
+        });
+
+        // --- INICIO DE LA APLICACIÓN ---
+        // Arrancamos reproduciendo el primer stream y encendiendo la rotación por defecto
+        playStream(streamUrls[currentIndex]);
+        iniciarRotacion();
+    </script>
+
+</body>
+</html>
